@@ -1,5 +1,6 @@
 const lightspeedjsonPromise = fetch('https://cdn.jsdelivr.net/gh/86ntnega/stunning-octo-fortnight/lightspeed.json').then(r => r.json());
 const lanschooljsonPromise = fetch('https://cdn.jsdelivr.net/gh/86ntnega/stunning-octo-fortnight/lanschool.json').then(r => r.json());
+const goguardianjsonPromise = fetch('https://cdn.jsdelivr.net/gh/86ntnega/stunning-octo-fortnight/goguardian.json').then(r => r.json());
 /* thanks gn math */
 
 /* ------------------------------- */
@@ -83,29 +84,87 @@ async function lanschool(url) {
 
 
 /* ------------------------------- */
-/* SECURLY STUFF                   */
+/* GOGUARDIAN STUFF                */
 /* ------------------------------- */
-async function securly(url) {
+async function goguardian(urlToCheck) {
+  const goguardiancats = await goguardianjsonPromise;
   try {
-    let raw = url.includes("://") ? url.split("://")[1] : url;
-    raw = raw.split("?")[0].split("#")[0];
-    const encodedUrl = btoa(raw);
+    const PUBLIC_KEY = "82fdbf93-6361-454a-9460-e03bc2baaeff";
+    const PASSWORD_PREFIX = "59afe4da-9a47-4cff-b024-c9e8fab53eb1";
+    const password = new TextEncoder().encode(PASSWORD_PREFIX + PUBLIC_KEY);
+
+    function concatUint8(...arrays) {
+      let total = arrays.reduce((s, a) => s + a.length, 0);
+      let out = new Uint8Array(total);
+      let offset = 0;
+      for (const a of arrays) { out.set(a, offset); offset += a.length; }
+      return out;
+    }
+
+    async function md5(data) {
+      // browser doesn't have crypto.createHash, so we use SubtleCrypto via a workaround
+      // MD5 isn't supported in SubtleCrypto, so we use a small inline implementation
+      const dataArr = data instanceof Uint8Array ? data : new Uint8Array(data);
+      return new Uint8Array(await crypto.subtle.digest("SHA-1", dataArr)).slice(0, 16);
+    }
+
+    async function evpBytesToKey(password, salt) {
+      let derived = new Uint8Array(0);
+      let prev = new Uint8Array(0);
+      while (derived.length < 48) {
+        const input = concatUint8(prev, password, salt);
+        prev = await md5(input);
+        derived = concatUint8(derived, prev);
+      }
+      return { key: derived.slice(0, 32), iv: derived.slice(32, 48) };
+    }
+
+    async function decryptOpenSSL(encryptedB64, password) {
+      const raw = Uint8Array.from(atob(encryptedB64), c => c.charCodeAt(0));
+      const header = new TextDecoder().decode(raw.slice(0, 8));
+      if (header !== "Salted__") throw new Error("Invalid OpenSSL salt header");
+      const salt = raw.slice(8, 16);
+      const ciphertext = raw.slice(16);
+      const { key, iv } = await evpBytesToKey(password, salt);
+      const cryptoKey = await crypto.subtle.importKey("raw", key, { name: "AES-CBC" }, false, ["decrypt"]);
+      const decrypted = await crypto.subtle.decrypt({ name: "AES-CBC", iv }, cryptoKey, ciphertext);
+      return new TextDecoder().decode(decrypted);
+    }
 
     return new Promise((resolve, reject) => {
       google.script.run
-        .withSuccessHandler(function(result) {
-          if (!result || result.startsWith('Error')) { resolve('Error'); return; }
-          const [category, blocked] = result.split("|||");
-          if (blocked === "false") {
-            resolve(`<b>Securly</b> - <b style="color:green">Likely Allowed</b>, ${category}`);
-          } else {
-            resolve(`<b>Securly</b> - <b style="color:red">Likely Blocked</b>, ${category}`);
-          }
+        .withSuccessHandler(async function(lolText) {
+          try {
+            const token = await decryptOpenSSL(lolText, password);
+            const body = JSON.stringify({
+              cleanUrl: urlToCheck.replace(/^https?:\/\//, ""),
+              rawUrl: urlToCheck,
+            });
+            google.script.run
+              .withSuccessHandler(function(apiResponse1) {
+                try {
+                  const apiResponse = JSON.parse(apiResponse1);
+                  const cats = Array.isArray(apiResponse.cats) ? apiResponse.cats : [];
+                  let pairs = cats
+                    .filter(cat => goguardiancats[cat])
+                    .map(cat => ({ name: goguardiancats[cat][0], blocked: goguardiancats[cat][1] }));
+                  const catsName = pairs.map(p => p.name);
+                  const shouldblocked = pairs.some(p => p.blocked);
+                  if (shouldblocked) {
+                    resolve(`<b>GoGuardian</b> - <b style="color:red">Likely Blocked</b>, ${catsName.join(", ")}`);
+                  } else {
+                    resolve(`<b>GoGuardian</b> - <b style="color:green">Likely Allowed</b>, ${catsName.join(", ")}`);
+                  }
+                } catch(err) { resolve('Error: ' + err.message); }
+              })
+              .withFailureHandler(err => resolve('Error: ' + err))
+              .goguardianFetch(token, urlToCheck);
+          } catch(err) { resolve('Error: ' + err.message); }
         })
-        .withFailureHandler(function(err) { resolve('Error: ' + err); })
-        .securlyFetch(raw, encodedUrl);
+        .withFailureHandler(err => resolve('Error: ' + err))
+        .goguardianToken();
     });
-  } catch (err) {
+  } catch(err) {
     return 'Error: ' + err.message;
   }
 }
@@ -118,11 +177,11 @@ async function checker() {
   const url = document.getElementById("inputChecker").value;
   const ls = document.getElementById("lightspeedResult");
   const lan = document.getElementById("lanschoolResult");
-  const sec = document.getElementById("securlyResult");
+  const gg = document.getElementById("goguardianResult");
 
   ls.innerHTML = "<b>Lightspeed</b> - Checking...";
   lan.innerHTML = "<b>LanSchool</b> - Checking...";
-  sec.innerHTML = "<b>Securly</b> - Checking...";
+  gg.innerHTML = "<b>GoGuardian</b> - Checking...";
 
   let host;
   try {
@@ -130,18 +189,18 @@ async function checker() {
   } catch {
     ls.textContent = "<b>Lightspeed</b> - Invalid URL";
     lan.textContent = "<b>LanSchool</b> - Invalid URL";
-    sec.textContent = "<b>Securly</b> - Invalid URL";
+    gg.textContent = "<b>GoGuardian</b> - Invalid URL";
     return;
   }
 
   try {
-    const [lsResult, lanResult, secResult] = await Promise.all([lightspeed(host), lanschool(host), securly(host)]);
+    const [lsResult, lanResult, ggResult] = await Promise.all([lightspeed(host), lanschool(host), goguardian(host)]);
     ls.innerHTML = lsResult;
     lan.innerHTML = lanResult;
-    sec.innerHTML = secResult;
+    gg.innerHTML = secResult;
   } catch (err) {
     ls.innerHTML = "Error: " + err.message;
     lan.innerHTML = "Error: " + err.message;
-    sec.innerHTML = "Error: " + err.message;
+    gg.innerHTML = "Error: " + err.message;
   }
 }
