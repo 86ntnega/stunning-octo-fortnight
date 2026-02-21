@@ -83,31 +83,65 @@ async function lanschool(url) {
 
 
 /* ------------------------------- */
+/* SECURLY STUFF                   */
+/* ------------------------------- */
+async function securly(url) {
+  try {
+    let raw = url.includes("://") ? url.split("://")[1] : url;
+    raw = raw.split("?")[0].split("#")[0];
+    const encodedUrl = btoa(raw);
+
+    return new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (!result || result.startsWith('Error')) { resolve('Error'); return; }
+          const [category, blocked] = result.split("|||");
+          if (blocked === "false") {
+            resolve(`<b>Securly</b> - <b style="color:green">Likely Allowed</b>, ${category}`);
+          } else {
+            resolve(`<b>Securly</b> - <b style="color:red">Likely Blocked</b>, ${category}`);
+          }
+        })
+        .withFailureHandler(function(err) { resolve('Error: ' + err); })
+        .securlyFetch(raw, encodedUrl);
+    });
+  } catch (err) {
+    return 'Error: ' + err.message;
+  }
+}
+
+
+/* ------------------------------- */
 /* FINAL RESULT STUFF              */
 /* ------------------------------- */
 async function checker() {
   const url = document.getElementById("inputChecker").value;
   const ls = document.getElementById("lightspeedResult");
   const lan = document.getElementById("lanschoolResult");
+  const sec = document.getElementById("securlyResult");
 
   ls.innerHTML = "<b>Lightspeed</b> - Checking...";
   lan.innerHTML = "<b>LanSchool</b> - Checking...";
+  sec.innerHTML = "<b>Securly</b> - Checking...";
 
   let host;
   try {
     host = new URL(url.startsWith("http") ? url : "https://" + url).hostname;
   } catch {
-    ls.textContent = "Invalid URL";
-    lan.textContent = "Invalid URL";
+    ls.textContent = "<b>Lightspeed</b> - Invalid URL";
+    lan.textContent = "<b>LanSchool</b> - Invalid URL";
+    sec.textContent = "<b>Securly</b> - Invalid URL";
     return;
   }
 
   try {
-    const [lsResult, lanResult] = await Promise.all([lightspeed(host), lanschool(host)]);
+    const [lsResult, lanResult, secResult] = await Promise.all([lightspeed(host), lanschool(host), securly(host)]);
     ls.innerHTML = lsResult;
     lan.innerHTML = lanResult;
+    sec.innerHTML = secResult;
   } catch (err) {
     ls.innerHTML = "Error: " + err.message;
     lan.innerHTML = "Error: " + err.message;
+    sec.innerHTML = "Error: " + err.message;
   }
 }
