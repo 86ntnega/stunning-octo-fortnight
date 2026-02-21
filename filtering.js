@@ -197,7 +197,7 @@ async function checker() {
     const [lsResult, lanResult, ggResult] = await Promise.all([lightspeed(host), lanschool(host), goguardian(host)]);
     ls.innerHTML = lsResult;
     lan.innerHTML = lanResult;
-    gg.innerHTML = secResult;
+    gg.innerHTML = ggResult;
   } catch (err) {
     ls.innerHTML = "Error: " + err.message;
     lan.innerHTML = "Error: " + err.message;
