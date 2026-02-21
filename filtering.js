@@ -90,8 +90,8 @@ async function checker() {
   const ls = document.getElementById("lightspeedResult");
   const lan = document.getElementById("lanschoolResult");
 
-  ls.innerHTML = "Checking...";
-  lan.innerHTML = "Checking...";
+  ls.innerHTML = "<b>Lightspeed</b> - Checking...";
+  lan.innerHTML = "<b>LanSchool</b> - Checking...";
 
   let host;
   try {
