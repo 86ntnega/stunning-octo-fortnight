@@ -66,11 +66,11 @@ async function lanschool(url) {
         .withSuccessHandler(function(text) {
           if (!text || text.startsWith('Error')) { resolve('Error'); return; }
           if (text.startsWith('ALLOW')) {
-            resolve('LanSchool - <b style="color:green">Likely Allowed</b>');
+            resolve('<b>LanSchool</b> - <b style="color:green">Likely Allowed</b>');
           } else {
             const cat = text.split("&cat=")[1].split("&")[0];
             const name = lanschooljson[cat] || "Unknown Category";
-            resolve(`LanSchool - <b style="color:red">Likely Blocked</b>, ${name}`);
+            resolve(`<b>LanSchool</b> - <b style="color:red">Likely Blocked</b>, ${name}`);
           }
         })
         .withFailureHandler(function(err) { resolve('Error: ' + err); })
